@@ -22,7 +22,7 @@ object OdsEtlTrackRawStream {
             .setMaster("local[2]")
         val ssc = new StreamingContext(sparkConf, Seconds(5))
 
-        val properties = Configuration.conf("kafka-topics.properties")
+        val properties = Configuration.conf("config.properties")
         val topic = properties.getProperty("topic.ods.raw")
         val groupId = "raw-0001"
 

@@ -1,7 +1,6 @@
 package com.gkgd.cleantransport.old.realtime.dwd
 
 import java.lang
-import java.util.Properties
 
 import com.alibaba.fastjson.serializer.SerializerFeature
 import com.alibaba.fastjson.{JSON, JSONObject}
@@ -30,7 +29,7 @@ object DwdDataBusStream {
         val ssc = new StreamingContext(sparkConf, Seconds(5))
 
 
-        val properties = Configuration.conf("kafka-topics.properties")
+        val properties = Configuration.conf("config.properties")
         val topic = properties.getProperty("dwd.data.etl")
         val groupId = "dataBus-0001"
         var recordInputStream: InputDStream[ConsumerRecord[String, String]] = KafkaSource.getKafkaStream(topic, ssc, groupId)

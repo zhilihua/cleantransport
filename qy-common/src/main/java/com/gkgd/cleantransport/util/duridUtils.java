@@ -15,7 +15,7 @@ public class duridUtils implements Serializable {
     //静态代码块，调用该类时候实现仅仅一次
     static {
         try {
-            Properties pro = Configuration.conf("druid-conf.properties");
+            Properties pro = Configuration.conf("config.properties");
             ds = (DruidDataSource) DruidDataSourceFactory.createDataSource(pro);
         }catch (Exception e){
             e.printStackTrace();

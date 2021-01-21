@@ -13,7 +13,7 @@ import org.apache.spark.streaming.kafka010.{ConsumerStrategies, KafkaUtils, Loca
  * 从kafka读取数据
  */
 object KafkaSource {
-    private val props: Properties = Configuration.conf("kafka-conf.properties")
+    private val props: Properties = Configuration.conf("config.properties")
     private val broker_list: String = props.getProperty("bootstrap.servers")
 
     //kafka消费者配置

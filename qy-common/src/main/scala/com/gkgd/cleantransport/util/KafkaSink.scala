@@ -12,7 +12,7 @@ import java.util.Properties
 import org.apache.kafka.clients.producer.{KafkaProducer, ProducerRecord}
 
 object KafkaSink {
-  private val props: Properties = Configuration.conf("kafka-conf.properties")
+  private val props: Properties = Configuration.conf("config.properties")
   private val broker_list: String = props.getProperty("bootstrap.servers")
 
   var kafkaProducer: KafkaProducer[String, String] = null

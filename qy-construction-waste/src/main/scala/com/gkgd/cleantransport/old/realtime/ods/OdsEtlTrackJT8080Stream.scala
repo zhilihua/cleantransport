@@ -26,7 +26,7 @@ object OdsEtlTrackJT8080Stream {
             .setMaster("local[*]")
         val ssc = new StreamingContext(sparkConf, Seconds(5))
 
-        val properties = Configuration.conf("kafka-topics.properties")
+        val properties = Configuration.conf("config.properties")
         val topic = properties.getProperty("topic.ods.tracks")
         val groupId = "jt8080-0001"
 
