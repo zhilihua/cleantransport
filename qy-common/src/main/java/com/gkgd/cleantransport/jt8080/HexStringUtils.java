@@ -41,9 +41,13 @@ public class HexStringUtils implements Serializable {
     }
 
     public static String toHexString(byte[] bs, int startIndex, int length) {
-        byte[] tmp = new byte[length];
-        System.arraycopy(bs, startIndex, tmp, 0, length);
-        return toHexString(tmp);
+        try{
+            byte[] tmp = new byte[length];
+            System.arraycopy(bs, startIndex, tmp, 0, length);
+            return toHexString(tmp);
+        }catch (Exception e){
+            return "";
+        }
     }
 
     public static String toHexString(byte[] bs) {
