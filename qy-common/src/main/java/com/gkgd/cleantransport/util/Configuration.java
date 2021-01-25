@@ -11,7 +11,7 @@ public class Configuration {
         String path = null;
         try {
             path = new File("").getCanonicalPath();
-            File file = new File(path + "/conf");
+            File file = new File(path + "/conf/"+name);
             if(!file.exists()){
                 //文件不存在，加载自带文件
                 props.load(Configuration.class.getClassLoader().getResourceAsStream(name));
