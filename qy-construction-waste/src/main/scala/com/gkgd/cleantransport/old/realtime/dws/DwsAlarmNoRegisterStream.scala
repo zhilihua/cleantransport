@@ -31,7 +31,7 @@ object DwsAlarmNoRegisterStream {
         val alarmNoCard: String = properties.getProperty("alarm.register.card")
 
         //获取数据
-        var recordInputStream: InputDStream[ConsumerRecord[String, String]] = KafkaSource.getKafkaStream(topic, ssc, groupId)
+        val recordInputStream: InputDStream[ConsumerRecord[String, String]] = KafkaSource.getKafkaStream(topic, ssc, groupId)
 
         val dataBusStream: DStream[DataBusBean] = recordInputStream.map { record =>
             val jsonString: String = record.value()
