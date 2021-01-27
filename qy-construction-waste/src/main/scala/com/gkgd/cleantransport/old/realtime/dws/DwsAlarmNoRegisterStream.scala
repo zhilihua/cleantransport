@@ -6,7 +6,7 @@ import com.alibaba.fastjson.JSON
 import com.alibaba.fastjson.serializer.SerializerFeature
 import com.gkgd.cleantransport.entity.dwd.DataBusBean
 import com.gkgd.cleantransport.entity.dws.AlarmBean
-import com.gkgd.cleantransport.util.{Configuration, KafkaSink, KafkaSource, RedisUtil}
+import com.gkgd.cleantransport.util.{Configuration, KafkaSink, KafkaSource, MysqlUtil, RedisUtil}
 import net.sf.cglib.beans.BeanCopier
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.spark.SparkConf
@@ -21,8 +21,8 @@ object DwsAlarmNoRegisterStream {
         val sparkConf: SparkConf = new SparkConf()
             .setAppName("ODS TRACK STREAM3")
             .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-        //      .setMaster("local[2]")
-        val ssc = new StreamingContext(sparkConf, Seconds(3))
+//            .setMaster("local[2]")
+        val ssc = new StreamingContext(sparkConf, Seconds(5))
 
         val properties: Properties = Configuration.conf("config.properties")
         val topic = properties.getProperty("topic.dwd.data.bus")
@@ -41,7 +41,51 @@ object DwsAlarmNoRegisterStream {
             record.getAudit_state.equals("1") && record.getManage_state.equals("1")
         }
 
-        dataBusStream.foreachRDD { rdd =>
+        //关联车辆处置证
+        val joinVehicleRegisterCard = dataBusStream.mapPartitions {
+            dataBusBean => {
+                val dataBusBeanList = dataBusBean.toList
+                if (dataBusBeanList.nonEmpty) {
+                    //每分区的操作（deptId-vehicleId）
+                    val deptIdVehicleIdList = dataBusBeanList.filter(_.vehicle_id != null).map {
+                        data => data.dept_id + "-" + data.vehicle_id
+                    }.distinct
+                    val deptIdVehicleIds = deptIdVehicleIdList.mkString("','")
+                    val sql =
+                        s"""
+                           |select vehicle_id, state, dept_id
+                           |from ods_cwp_vehicle_register_card
+                           |where CONCAT_WS("-",dept_id,vehicle_id) in ('$deptIdVehicleIds')
+                           |    and state=0
+                        """.stripMargin
+                    //从数据库中查询是否有该车的处置证
+                    val jsonObjList = MysqlUtil.queryList(sql)
+                    //一辆车可以有多张双向登记卡，一张双向登记卡有多条路线
+                    val hashMap = new scala.collection.mutable.HashMap[String, String]
+                    for (json <- jsonObjList) {
+                        val deptId = json.getInteger("dept_id")
+                        val vehicleId = json.getInteger("vehicle_id")
+
+                        val key = deptId + "-" + vehicleId
+                        if (hashMap.contains(key)) {
+                            //什么都不做
+                        } else {
+                            hashMap += (key -> "1")
+                        }
+                    }
+                    //查询该车是否有查询到的处置证
+                    for (dataBusBean <- dataBusBeanList) {
+                        val lines = hashMap.getOrElse(dataBusBean.dept_id + "-" + dataBusBean.vehicle_id, null)
+                        if (lines != null) {
+                            dataBusBean.register_card_state = 1
+                        }
+                    }
+                }
+                dataBusBeanList.toIterator
+            }
+        }
+
+        joinVehicleRegisterCard.foreachRDD { rdd =>
             rdd.foreachPartition { jsonObjItr =>
                 val jedis = RedisUtil.getJedisClient
                 val list: List[DataBusBean] = jsonObjItr.toList
