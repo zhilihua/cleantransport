@@ -146,53 +146,9 @@ object DwdDataBusStream {
                 dataBusBeanList.toIterator
             }
         }
-        //5,关联双向登记卡表
-        val joinRegisterCardStream: DStream[DataBusBean] = joinEnterpriseStream.mapPartitions { dataBusBean =>
-            val dataBusBeanList: List[DataBusBean] = dataBusBean.toList
-            if (dataBusBeanList.nonEmpty) {
-                //每分区的操作(deptId-vehicelId)
-                val deptIdVehicleIdList: List[String] = dataBusBeanList.filter(_.vehicle_id != null).map { data =>
-                    data.dept_id + "-" + data.vehicle_id
-                }.distinct
-                val deptIdVehicleIds: String = deptIdVehicleIdList.mkString("','")
-                val sql =
-                s"""
-                   |select vehicle_id, state, dept_id
-                   |from ods_cwp_vehicle_register_card
-                   |where CONCAT_WS("-",dept_id,vehicle_id) in ('$deptIdVehicleIds')
-                   |    and state=0
-            """.stripMargin
-                val jsonObjList: List[JSONObject] = MysqlUtil.queryList(sql)
-                //一辆车可以有多张双向登记卡，一张双向登记卡有多条路线
-                val hashMap = new scala.collection.mutable.HashMap[String, String]
-                for (josn <- jsonObjList) {
-                    val deptId: Integer = josn.getInteger("dept_id")
-                    val vehicleId: Integer = josn.getInteger("vehicle_id")
-
-                    val coords: String = josn.getString("coords")
-
-                    val key = deptId + "-" + vehicleId
-                    if (hashMap.contains(key)) {
-                        var lines: String = hashMap(key)
-                        lines = lines + "|" + coords
-                        hashMap += (key -> lines)
-                    } else {
-                        hashMap += (key -> coords)
-                    }
-                }
-                for (dataBusBean <- dataBusBeanList) {
-                    val lines: String = hashMap.getOrElse(dataBusBean.dept_id + "-" + dataBusBean.vehicle_id, null)
-                    if (lines != null) {
-                        dataBusBean.register_card_state = 1
-                        dataBusBean.coords = lines
-                    }
-                }
-            }
-            dataBusBeanList.toIterator
-        }
 
         // 6,关联运输证表
-        val joinTransportCardStream: DStream[DataBusBean] = joinRegisterCardStream.mapPartitions { dataBusBean =>
+        val joinTransportCardStream: DStream[DataBusBean] = joinEnterpriseStream.mapPartitions { dataBusBean =>
             val dataBusBeanList: List[DataBusBean] = dataBusBean.toList
             if (dataBusBeanList.nonEmpty) {
                 //每分区的操作(deptId-vehicelId)
@@ -275,6 +231,7 @@ object DwdDataBusStream {
             rdd.foreachPartition { orderInfoItr =>
                 val dataBusBeanList: List[DataBusBean] = orderInfoItr.toList
                 for (dataBusBean <- dataBusBeanList) {
+                    println(dataBusBean)
                     val dataBusJsonString: String = JSON.toJSONString(dataBusBean, SerializerFeature.WriteMapNullValue)
                     KafkaSink.send(properties.getProperty("topic.dwd.data.bus"), dataBusJsonString)
                 }
