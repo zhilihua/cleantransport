@@ -12,8 +12,8 @@ object DdwDataBus2EsStream {
         val sparkConf: SparkConf = new SparkConf()
             .setAppName("DdwDataBus2EsStream")
             .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-        //      .setMaster("local[2]")
-        val ssc = new StreamingContext(sparkConf, Seconds(3))
+//            .setMaster("local[2]")
+        val ssc = new StreamingContext(sparkConf, Seconds(5))
 
         val properties = Configuration.conf("config.properties")
         val topic = properties.getProperty("topic.dwd.data.bus")
