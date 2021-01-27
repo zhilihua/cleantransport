@@ -19,7 +19,7 @@ object OdsEtlTrackRawStream {
         val sparkConf: SparkConf = new SparkConf()
             .setAppName("ODS TRACK STREAM")
             .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-            .setMaster("local[2]")
+//            .setMaster("local[2]")
         val ssc = new StreamingContext(sparkConf, Seconds(5))
 
         val properties = Configuration.conf("config.properties")

@@ -25,7 +25,7 @@ object DwdDataBusStream {
         val sparkConf: SparkConf = new SparkConf()
             .setAppName("ODS TRACK STREAM")
             .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-            .setMaster("local[*]")
+//            .setMaster("local[*]")
         val ssc = new StreamingContext(sparkConf, Seconds(5))
 
 
@@ -231,7 +231,6 @@ object DwdDataBusStream {
             rdd.foreachPartition { orderInfoItr =>
                 val dataBusBeanList: List[DataBusBean] = orderInfoItr.toList
                 for (dataBusBean <- dataBusBeanList) {
-                    println(dataBusBean)
                     val dataBusJsonString: String = JSON.toJSONString(dataBusBean, SerializerFeature.WriteMapNullValue)
                     KafkaSink.send(properties.getProperty("topic.dwd.data.bus"), dataBusJsonString)
                 }
