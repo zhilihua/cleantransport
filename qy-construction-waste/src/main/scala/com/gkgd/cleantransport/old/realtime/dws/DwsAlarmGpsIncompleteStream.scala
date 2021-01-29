@@ -6,15 +6,13 @@ import com.alibaba.fastjson.JSON
 import com.alibaba.fastjson.serializer.SerializerFeature
 import com.gkgd.cleantransport.entity.dwd.DataBusBean
 import com.gkgd.cleantransport.entity.dws.AlarmBean
-import com.gkgd.cleantransport.util.{Configuration, GeoUtil, KafkaSink, KafkaSource, RedisUtil}
+import com.gkgd.cleantransport.util.{Configuration, GeoUtil, KafkaSink, KafkaSource}
 import net.sf.cglib.beans.BeanCopier
 import org.apache.kafka.clients.consumer.ConsumerRecord
-import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.streaming.dstream.{DStream, InputDStream}
 import org.apache.spark.streaming.{Seconds, StreamingContext}
 import org.gavaghan.geodesy.Ellipsoid
-import redis.clients.jedis.Jedis
 
 import scala.collection.mutable
 
