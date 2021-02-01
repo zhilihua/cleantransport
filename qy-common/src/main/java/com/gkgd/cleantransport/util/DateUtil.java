@@ -40,29 +40,16 @@ public class DateUtil {
     }
 
     public static boolean isEffectiveDate(String intoTime, String startTimeStr, String endTimeStr) throws Exception {
-        SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm");
-        Date nowTime = simpleDateFormat.parse(intoTime);
-        Date startTime = simpleDateFormat.parse(startTimeStr);
-        Date endTime = simpleDateFormat.parse(endTimeStr);
-        if (nowTime.getTime() == startTime.getTime()
-                || nowTime.getTime() == endTime.getTime()) {
+        SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+        long nowTime = simpleDateFormat.parse(intoTime).getTime();
+        long startTime = simpleDateFormat.parse(startTimeStr).getTime();
+        long endTime = simpleDateFormat.parse(endTimeStr).getTime();
+
+        if(nowTime > startTime && nowTime < endTime){
             return true;
         }
 
-        Calendar date = Calendar.getInstance();
-        date.setTime(nowTime);
-
-        Calendar begin = Calendar.getInstance();
-        begin.setTime(startTime);
-
-        Calendar end = Calendar.getInstance();
-        end.setTime(endTime);
-
-        if (date.after(begin) && date.before(end)) {
-            return true;
-        } else {
-            return false;
-        }
+        return false;
     }
 
     public static void main(String[] args) throws Exception {
