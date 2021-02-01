@@ -7,7 +7,7 @@ import com.alibaba.fastjson.serializer.SerializerFeature
 import com.alibaba.fastjson.{JSON, JSONObject}
 import com.gkgd.cleantransport.entity.dwd.DataBusBean
 import com.gkgd.cleantransport.entity.dws.AlarmBean
-import com.gkgd.cleantransport.util.{AreaUtil, Configuration, DateUtil, KafkaSink, KafkaSource, MysqlUtil}
+import com.gkgd.cleantransport.util.{AreaUtil, Configuration, KafkaSink, KafkaSource, MysqlUtil}
 import net.sf.cglib.beans.BeanCopier
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.spark.broadcast.Broadcast
@@ -18,9 +18,9 @@ import org.apache.spark.streaming.{Seconds, StreamingContext}
 import scala.collection.mutable
 
 /**
- * 管控文件告警
+ * 闯入禁区告警
  */
-object DwsAlarmIllegalFileStream {
+object DwsAlarmPenaltyStream {
     def main(args: Array[String]): Unit = {
         val spark = SparkSession.builder()
             .master("local[*]")
@@ -36,8 +36,8 @@ object DwsAlarmIllegalFileStream {
         val ssc = new StreamingContext(sc, Seconds(5))
         val properties: Properties = Configuration.conf("config.properties")
         val topic = properties.getProperty("topic.dwd.data.bus")
-        val groupId = "ods_track_stream-005"
-        val alarmFileCode: String = properties.getProperty("alarm.fence.file")    //文件管控代码
+        val groupId = "ods_track_stream-006"
+        val alarmInnerCode: String = properties.getProperty("alarm.fence.inner")    //违规时间代码
 
         //设置广播变量统计告警时间
         val updateAlarmTime = mutable.Map[String, String]()
@@ -58,7 +58,7 @@ object DwsAlarmIllegalFileStream {
         }
 
         //是否进入围栏
-        val IllegalFileStream = dataBusStream.mapPartitions {
+        val PenaltyInStream = dataBusStream.mapPartitions {
             dataBusBean => {
                 val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
                 //获取广播变量
@@ -83,8 +83,8 @@ object DwsAlarmIllegalFileStream {
                     val deptIds: String = deptIdList.mkString(",")
                     val sql =
                         s"""
-                           |select t1.start_date, t1.end_date, t1.dept_id, t1.alarm_date, t2.coords, t1.condition_id
-                           |from dim_cwp_boundary_condition_document_control t1
+                           |select t1.dept_id, t1.alarm_date, t2.coords, t1.condition_id
+                           |from dim_cwp_boundary_condition_penalty_fence t1
                            |     join dim_cwp_boundary_condition t2 on t1.condition_id=t2.id
                            |where t1.dept_id in($deptIds) and state=0
                            |""".stripMargin
@@ -102,7 +102,7 @@ object DwsAlarmIllegalFileStream {
                             hashMap += (deptId -> List(json))
                         }
                     }
-                    //判断每辆车是否在管控期间作业
+                    //判断每辆车是否闯入禁区作业
                     for (alarmBean <- alarmBeanList) {
                         val fences = hashMap.getOrElse(alarmBean.dept_id, null) //所有的围栏
                         if (fences != null) {
@@ -117,13 +117,9 @@ object DwsAlarmIllegalFileStream {
 
                                 if (inArea) {
                                     val key = alarmBean.vehicle_id.toString + "-" +fence.getInteger("condition_id")
-                                    val startDate: String = fence.getString("start_date")
-                                    val endDate: String = fence.getString("end_date")
                                     val totalTime = fence.getInteger("alarm_date")
-                                    val time: String = alarmBean.getTime
-                                    val inTimeRange = DateUtil.isEffectiveDate(time, startDate, endDate)
-                                    if (inTimeRange && alarmBean.speed.toDouble > 0) { //如果在管控时间内，告警
-                                        alarmBean.setIllegal_type_code(alarmFileCode)
+                                    if (alarmBean.speed.toDouble > 0) { //如果不在规定时间内，告警
+                                        alarmBean.setIllegal_type_code(alarmInnerCode)
                                         alarmBean.setAlarm_start_time(alarmBean.getTime)
                                         alarmBean.setAlarm_start_lng(lng)
                                         alarmBean.setAlarm_start_lat(lat)
@@ -184,7 +180,7 @@ object DwsAlarmIllegalFileStream {
         }
 
         //更新广播变量
-        IllegalFileStream.foreachRDD(
+        PenaltyInStream.foreachRDD(
             rdd => {
                 val ret = rdd.collect()
                     .foldLeft((mutable.Map[String, List[String]](), mutable.Map[String, String]()))((t, v) => {
@@ -208,7 +204,7 @@ object DwsAlarmIllegalFileStream {
             }
         )
 
-        //启动流
+        //启动任务流
         ssc.start()
         ssc.awaitTermination()
     }
