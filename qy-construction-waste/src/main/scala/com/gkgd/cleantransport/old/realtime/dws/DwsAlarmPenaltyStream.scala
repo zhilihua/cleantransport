@@ -20,10 +20,11 @@ import scala.collection.mutable
 /**
  * 闯入禁区告警
  */
+@deprecated
 object DwsAlarmPenaltyStream {
     def main(args: Array[String]): Unit = {
         val spark = SparkSession.builder()
-            .master("local[*]")
+//            .master("local[*]")
             .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
             //.config("spark.locality.wait", "6")     //调节等待时间，使shuffle尽可能发生在本节点上
             .config("spark.shuffle.file.buffer", "64")   //调节map端shuffle的缓存大小，减少溢写磁盘
