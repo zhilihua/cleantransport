@@ -126,7 +126,7 @@ object DwsAlarmSpeedStream {
                                     // 判断是否超速
                                     if (alarmBean.speed.toDouble > speedUp) { //如果超速，告警
                                         alarmBean.setIllegal_type_code(alarmSpeedCode)
-                                        alarmBean.setAlarm_start_time(alarmBean.getTime)
+                                        alarmBean.setAlarm_end_time(alarmBean.getTime)  // 此刻只能记录结束时候时间
                                         alarmBean.setAlarm_start_lng(lng)
                                         alarmBean.setAlarm_start_lat(lat)
 
@@ -158,16 +158,20 @@ object DwsAlarmSpeedStream {
                                                                     //没有告警过，写入告警时间，并写入kafka
                                                                     val temp = SpeedState(totalAlarm.SpeedActiveState, alarmBean.time)
                                                                     retState += (key -> temp)
+                                                                    // 添加告警开始时间
+                                                                    alarmBean.setAlarm_start_time(t.head)
                                                                     val alarmJsonString: String = JSON.toJSONString(alarmBean, SerializerFeature.WriteMapNullValue)
                                                                     KafkaSink.send(properties.getProperty("topic.dwd.data.alarm"), alarmJsonString)
 
-                                                                case t: String =>
+                                                                case t_alarm: String =>
                                                                     //告警过，查看是否在两小时内告警过
-                                                                    val diff = (sdf.parse(alarmBean.time).getTime - sdf.parse(t).getTime) / 1000
+                                                                    val diff = (sdf.parse(alarmBean.time).getTime - sdf.parse(t_alarm).getTime) / 1000
                                                                     if (diff > 7200) {
                                                                         //达到再次告警条件，更新告警时间，并写入kafka
                                                                         val temp = SpeedState(totalAlarm.SpeedActiveState, alarmBean.time)
                                                                         retState += (key -> temp)
+                                                                        // 添加告警开始时间
+                                                                        alarmBean.setAlarm_start_time(t.head)
                                                                         val alarmJsonString: String = JSON.toJSONString(alarmBean, SerializerFeature.WriteMapNullValue)
                                                                         KafkaSink.send(properties.getProperty("topic.dwd.data.alarm"), alarmJsonString)
 
@@ -210,7 +214,7 @@ object DwsAlarmSpeedStream {
         ssc.start()
         ssc.awaitTermination()
     }
-}
 
-case class SpeedState(SpeedActiveState: List[String],           //  超速激活时间状态
-                      SpeedAlarmState: String)
+    case class SpeedState(SpeedActiveState: List[String],           //  超速激活时间状态
+                          SpeedAlarmState: String)
+}
