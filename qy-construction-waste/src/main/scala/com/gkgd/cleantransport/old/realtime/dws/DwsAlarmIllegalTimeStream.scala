@@ -41,12 +41,9 @@ object DwsAlarmIllegalTimeStream {
         val groupId = "ods_track_stream-004"
         val alarmTimeCode: String = properties.getProperty("alarm.fence.time")    //违规时间代码
 
-        //设置广播变量统计告警时间
-        val updateAlarmTime = mutable.Map[String, String]()
-        var AlarmTime: Broadcast[mutable.Map[String, String]] = sc.broadcast(updateAlarmTime)
-        //广播变量激活时间
-        val updateActiveTime = mutable.Map[String, List[String]]()
-        var ActiveTime: Broadcast[mutable.Map[String, List[String]]] = sc.broadcast(updateActiveTime)
+        //设置广播变量
+        val updateBD = mutable.Map[String, IllegalTimeState]()     // 广播变量状态临时存放
+        var states = sc.broadcast(updateBD)    //广播变量
 
         //获取数据
         val recordInputStream: InputDStream[ConsumerRecord[String, String]] = KafkaSource.getKafkaStream(topic, ssc, groupId)
@@ -64,11 +61,9 @@ object DwsAlarmIllegalTimeStream {
             dataBusBean => {
                 val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
                 //获取广播变量
-                val almBD = AlarmTime.value
-                val actBD = ActiveTime.value
+                val stateBD = states.value
+                val retState = mutable.Map[String, IllegalTimeState]() //返回的状态
 
-                val almTime = mutable.Map[String, String]()
-                val actTime = mutable.Map[String, List[String]]()
                 val alarmBeans = dataBusBean.map { x =>
                     val alarmBean = new AlarmBean
                     val copier = BeanCopier.create(classOf[DataBusBean], classOf[AlarmBean], false)
@@ -124,45 +119,57 @@ object DwsAlarmIllegalTimeStream {
                                     val totalTime = fence.getInteger("alarm_date")
                                     val time: String = alarmBean.getTime
                                     val inTimeRange = DateUtil.isInTimeRange(time, startDate, endDate)
+
+                                    // 基于上次判断的结果，进行状态的更新
+                                    val totalAlarm = stateBD.getOrElse(key, IllegalTimeState(null, null))
+
                                     if (!inTimeRange && alarmBean.speed.toDouble > 0) { //如果不在规定时间内，告警
                                         alarmBean.setIllegal_type_code(alarmTimeCode)
-                                        alarmBean.setAlarm_start_time(alarmBean.getTime)
+                                        alarmBean.setAlarm_end_time(alarmBean.getTime)
                                         alarmBean.setAlarm_start_lng(lng)
                                         alarmBean.setAlarm_start_lat(lat)
                                         //获取持续违规时间
-                                        val isAlmTime = actBD.getOrElse(key, null)
+                                        val isAlmTime = totalAlarm.IllegalTimeActiveState
 
                                         isAlmTime match {
                                             case null =>
                                                 //第一次告警，将告警信息写入
                                                 val vehicleAct = List[String](alarmBean.time, 1.toString) //1代表违规， 0代表不违规
-                                                actTime += (key -> vehicleAct)
+                                                val temp = IllegalTimeState(vehicleAct, totalAlarm.IllegalTimeAlarmState)
+                                                retState += (key -> temp)
                                             case t: List[String] =>
                                                 val state = t(1) //上次违规状态
                                                 state match {
                                                     case "0" =>
                                                         //上次不违规，重新添加激活信息
                                                         val vehicleAct = List[String](alarmBean.time, 1.toString) //1代表违规， 0代表不违规
-                                                        actTime += (key -> vehicleAct)
+                                                        val temp = IllegalTimeState(vehicleAct, totalAlarm.IllegalTimeAlarmState)
+                                                        retState += (key -> temp)
                                                     case "1" =>
                                                         //上次违规，判断时间是否达到激活时间
                                                         val diff = (sdf.parse(alarmBean.time).getTime - sdf.parse(t.head).getTime) / 1000
                                                         if (diff > totalTime * 60) {
                                                             //达到报警条件，查询两小时内是否有过报警
-                                                            val isUp = almBD.getOrElse(key, null)
+                                                            val isUp = totalAlarm.IllegalTimeAlarmState
                                                             isUp match {
                                                                 case null =>
                                                                     //没有告警过，写入告警时间，并写入kafka
-                                                                    almTime += (key -> alarmBean.time)
+                                                                    val temp = IllegalTimeState(totalAlarm.IllegalTimeActiveState, alarmBean.time)
+                                                                    retState += (key -> temp)
+                                                                    // 添加告警开始时间
+                                                                    alarmBean.setAlarm_start_time(t.head)
                                                                     val alarmJsonString: String = JSON.toJSONString(alarmBean, SerializerFeature.WriteMapNullValue)
                                                                     KafkaSink.send(properties.getProperty("topic.dwd.data.alarm"), alarmJsonString)
 
-                                                                case t: String =>
+                                                                case t_alarm: String =>
                                                                     //告警过，查看是否在两小时内告警过
-                                                                    val diff = (sdf.parse(alarmBean.time).getTime - sdf.parse(t).getTime) / 1000
+                                                                    val diff = (sdf.parse(alarmBean.time).getTime - sdf.parse(t_alarm).getTime) / 1000
                                                                     if (diff > 7200) {
                                                                         //达到再次告警条件，更新告警时间，并写入kafka
-                                                                        almTime += (key -> alarmBean.time)
+                                                                        val temp = IllegalTimeState(totalAlarm.IllegalTimeActiveState, alarmBean.time)
+                                                                        retState += (key -> temp)
+                                                                        // 添加告警开始时间
+                                                                        alarmBean.setAlarm_start_time(t.head)
                                                                         val alarmJsonString: String = JSON.toJSONString(alarmBean, SerializerFeature.WriteMapNullValue)
                                                                         KafkaSink.send(properties.getProperty("topic.dwd.data.alarm"), alarmJsonString)
 
@@ -174,43 +181,35 @@ object DwsAlarmIllegalTimeStream {
                                     } else {
                                         //修改告警状态
                                         val vehicleAct = List[String](alarmBean.time, 0.toString) //1代表违规， 0代表不违规
-                                        actTime += (key -> vehicleAct)
+                                        val temp = IllegalTimeState(vehicleAct, totalAlarm.IllegalTimeAlarmState)
+                                        retState += (key -> temp)
                                     }
                                 }
                             }
                         }
                     }
                 }
-                List((actTime, almTime)).toIterator
+
+                retState.toIterator
             }
         }
 
         //更新广播变量
         IllegalTimeStream.foreachRDD(
             rdd => {
-                val ret = rdd.collect()
-                        .foldLeft((mutable.Map[String, List[String]](), mutable.Map[String, String]()))((t, v) => {
-                            val a = t._1 ++ v._1
-                            val b = t._2 ++ v._2
-                            (a, b)
-                        })
+                val finalMap = rdd.collect().toMap
+                updateBD ++= finalMap
 
-                val v1 = ret._1     //激活时间
-                val v2 = ret._2    //告警时间
-
-                //清除广播变量
-                updateAlarmTime ++= v2
-                updateActiveTime ++= v1
-
-                AlarmTime.unpersist(true)
-                ActiveTime.unpersist(true)
-
-                AlarmTime = sc.broadcast(updateAlarmTime)
-                ActiveTime = sc.broadcast(updateActiveTime)
+                //清除广播变量状态，并更新广播变量
+                states.unpersist(true)
+                states = sc.broadcast(updateBD)
             }
         )
 
         ssc.start()
         ssc.awaitTermination()
     }
+
+    case class IllegalTimeState(IllegalTimeActiveState: List[String],           //  违规时间作业激活时间状态
+                                IllegalTimeAlarmState: String)
 }
